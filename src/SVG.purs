@@ -3,13 +3,10 @@ module SVG where
 import Prelude
 
 import Data.Array (intercalate)
-import Data.Either (fromRight)
 import Data.Maybe (isJust)
-import Data.String.Regex (Regex)
 import Data.String.Regex as Regex
-import Data.String.Regex.Flags (RegexFlags)
 import Data.String.Regex.Flags as Regex.Flags
-import Partial.Unsafe (unsafePartial)
+import Utils (regex)
 
 data Tag
   = Svg
@@ -52,9 +49,6 @@ instance showInner :: Show Inner where
   show Empty = ""
 
 data Attr = Attr String String
-
-regex :: String -> RegexFlags -> Regex
-regex r flags = unsafePartial $ fromRight $ Regex.regex r flags    
 
 escapeAttrVal :: String -> String
 escapeAttrVal =
@@ -99,4 +93,18 @@ svg attrs inner =
   SVG { tag: Svg
       , attrs
       , inner
+      }
+
+text :: Array Attr -> Inner -> SVG
+text attrs inner =
+  SVG { tag: Text
+      , attrs
+      , inner
+      }
+
+tspan :: Array Attr -> String -> SVG
+tspan attrs str =
+  SVG { tag: Tspan
+      , attrs
+      , inner: content str
       }

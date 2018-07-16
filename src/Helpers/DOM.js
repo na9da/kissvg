@@ -12,3 +12,8 @@ exports.scrollHeightImpl = function(el) {
     }
 }
 
+exports.parentElementImpl = function(node) {
+    return function() {
+        return node.parentElement
+    }
+}
