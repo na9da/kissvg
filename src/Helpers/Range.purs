@@ -18,6 +18,9 @@ import Web.DOM (Node)
 
 data Line = Line String BoundingBox
 
+instance showLine :: Show Line where
+  show (Line s _) = s
+
 foreign import data Range :: Type
 
 getWrappedLines :: Node -> Aff (Array Line)

@@ -11,7 +11,6 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
-import Effect.Console (logShow)
 import Features.Text (Text)
 import Features.Text as Text
 import Helpers.CSS (CSSStyleDeclaration, getComputedStyle)
@@ -26,7 +25,6 @@ import Web.DOM.Node as Node
 import Web.DOM.NodeList as NodeList
 import Web.DOM.NodeType (NodeType(..))
 import Web.HTML (HTMLElement)
-import Web.HTML.HTMLElement (className)
 import Web.HTML.HTMLElement as HMTLElement
 import Web.HTML.HTMLElement as HTMLElement
 
