@@ -38,3 +38,18 @@ exports.yImpl = function(node) {
         return rect.y
     }
 }
+
+exports.querySelectorImpl = function(Nothing) {
+    return function(Just) {
+        return function(selector) {
+            return function() {
+                const el = document.querySelector(selector)
+                if (el) {
+                    return Just(el)
+                } else {
+                    return Nothing
+                }
+            }
+        }
+    }
+}

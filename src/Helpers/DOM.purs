@@ -3,10 +3,12 @@ module Helpers.DOM ( scrollWidth
                    , parentElement
                    , innerText
                    , y
+                   , querySelector
                    ) where
 
 import Prelude
 
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -28,8 +30,18 @@ innerText = liftEffect <<< innerTextImpl
 y :: Node -> Aff Number
 y = liftEffect <<< yImpl
 
+querySelector :: String -> Aff (Maybe HTMLElement)
+querySelector = liftEffect <<< querySelectorImpl Nothing Just
+
 foreign import scrollWidthImpl :: HTMLElement -> Effect Number
 foreign import scrollHeightImpl :: HTMLElement -> Effect Number
 foreign import parentElementImpl :: Node -> Effect HTMLElement
 foreign import innerTextImpl :: HTMLElement -> Effect String
 foreign import yImpl :: Node -> Effect Number
+foreign import querySelectorImpl
+  :: forall a
+   . Maybe a
+  -> (a -> Maybe a)
+  -> String
+  -> Effect (Maybe HTMLElement)
+

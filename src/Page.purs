@@ -13,7 +13,7 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Features.Text (Text)
 import Features.Text as Text
-import Helpers.CSS (CSSStyleDeclaration, getComputedStyle)
+import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, isProperty)
 import Helpers.CSS as CSS
 import Helpers.DOM (scrollHeight, scrollWidth)
 import Partial.Unsafe (unsafePartial)
@@ -50,24 +50,30 @@ isInvisible css = do
     isProperty prop testVal = CSS.isProperty prop testVal css
 
 walkDom :: forall a. (Node -> Aff a) -> BoundingBox -> Node -> Aff(Array a)
-walkDom m bbox node = 
-  ifM (isBlackListedNode `orM` isInvisibleNode `orM` isOutsideBbox)
-  (pure [])
-  (do b <- clipBoundingBox 
-      x <- m node
-      xs <- concat <$> (traverse (walkDom m b) =<< childNodes)
-      pure $ cons x xs)
+walkDom m bbox node =
+  ifM (isBlackListedNode `orM` isInvisibleNode)
+    (pure [])
+    (case HTMLElement.fromNode node of
+        Nothing -> visitNode bbox
+        Just el -> ifM (isPositionAbsolute el)
+                     (visitNode =<< getBoundingBox el)
+                     (ifM (isOutsideBbox el)
+                       (pure [])
+                       (visitNode =<< clipBoundingBox el)))
   where
+    visitNode bbox = do
+      x <- m node
+      xs <- concat <$> (traverse (walkDom m bbox) =<< childNodes)
+      pure $ cons x xs
     isBlackListedNode = pure $ nodeName node `elem` ["SCRIPT", "STYLE"]
     isInvisibleNode = case HTMLElement.fromNode node of
       Nothing -> pure false
       Just el -> isInvisible =<< getComputedStyle el
-    isOutsideBbox = case HTMLElement.fromNode node of
-      Nothing -> pure false
-      Just el -> not <$> (hasOverlap bbox) <$> getBoundingBox el
-    clipBoundingBox = case HTMLElement.fromNode node of
-      Nothing -> pure bbox
-      Just el -> intersection bbox el
+    isPositionAbsolute el =
+      isProperty "position" "absolute" =<< getComputedStyle el
+    isOutsideBbox el =
+      not <$> (hasOverlap bbox) <$> getBoundingBox el
+    clipBoundingBox = intersection bbox
     childNodes = liftEffect (Node.childNodes node >>= NodeList.toArray)
 
 featureFromHtml :: Node -> Aff (Maybe Feature)
