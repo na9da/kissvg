@@ -63,13 +63,12 @@ getTextStyle el = do
       , color: _ 
       }
 
-
-isYCoordsSame :: Node -> Node -> Aff Boolean
-isYCoordsSame a b = do
-  ya <- DOM.y a
-  yb <- DOM.y b
-  pure $ ya == yb
-
+isLeftOf :: Node -> Node -> Aff Boolean
+isLeftOf a b = do
+  xa <- DOM.x a
+  xb <- DOM.x b
+  pure $ xa < xb
+  
 hasText :: Node -> Aff Boolean
 hasText node = (notEq "") <$> getText node
 
@@ -114,7 +113,7 @@ prevNonEmptyInlineNode :: Node -> Aff (Maybe Node)
 prevNonEmptyInlineNode node =
   liftEffect (previousSibling node) >>= case _ of
     Just sib ->
-      ifM (isYCoordsSame node sib)
+      ifM (sib `isLeftOf` node)
         (ifM (hasText sib)
            (pure $ Just sib)         
            (prevNonEmptyInlineNode sib))
@@ -131,7 +130,7 @@ nextNonEmptyInlineNode :: Node -> Aff (Maybe Node)
 nextNonEmptyInlineNode node = do
   liftEffect (nextSibling node) >>= case _ of
     Just sib ->
-      ifM (isYCoordsSame node sib)
+      ifM (node `isLeftOf` sib)
         (ifM (hasText sib)
            (pure $ Just sib)         
            (nextNonEmptyInlineNode sib))

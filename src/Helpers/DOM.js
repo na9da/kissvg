@@ -39,6 +39,21 @@ exports.yImpl = function(node) {
     }
 }
 
+exports.xImpl = function(node) {
+    return function() {
+        var rect
+        if (node.getBoundingClientRect) {
+            rect = node.getBoundingClientRect()
+
+        } else {
+            const range = document.createRange()
+            range.selectNodeContents(node)
+            rect = range.getBoundingClientRect()
+        }
+        return rect.x
+    }
+}
+
 exports.querySelectorImpl = function(Nothing) {
     return function(Just) {
         return function(selector) {

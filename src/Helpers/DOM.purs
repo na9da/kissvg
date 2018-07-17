@@ -3,6 +3,7 @@ module Helpers.DOM ( scrollWidth
                    , parentElement
                    , innerText
                    , y
+                   , x
                    , querySelector
                    ) where
 
@@ -30,6 +31,9 @@ innerText = liftEffect <<< innerTextImpl
 y :: Node -> Aff Number
 y = liftEffect <<< yImpl
 
+x :: Node -> Aff Number
+x = liftEffect <<< xImpl
+
 querySelector :: String -> Aff (Maybe HTMLElement)
 querySelector = liftEffect <<< querySelectorImpl Nothing Just
 
@@ -38,6 +42,7 @@ foreign import scrollHeightImpl :: HTMLElement -> Effect Number
 foreign import parentElementImpl :: Node -> Effect HTMLElement
 foreign import innerTextImpl :: HTMLElement -> Effect String
 foreign import yImpl :: Node -> Effect Number
+foreign import xImpl :: Node -> Effect Number
 foreign import querySelectorImpl
   :: forall a
    . Maybe a
