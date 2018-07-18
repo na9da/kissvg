@@ -6,16 +6,19 @@ import Control.Promise (Promise)
 import Control.Promise as Promise
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import FontResolver (Font)
+import FontResolver as FontResolver
 import Helpers.DOM as DOM
 import Page as Page
 
 foreign import setGlobalVariable :: forall a. String -> a -> Effect Unit
 
-renderSvg :: Effect (Promise String)
-renderSvg = Promise.fromAff $ do
+renderSvg :: Array Font -> Effect (Promise String)
+renderSvg fonts = Promise.fromAff $ do
+  let fontResolver = FontResolver.create fonts
   DOM.querySelector "html" >>= case _ of
     Nothing -> pure ""
-    Just el -> show <$> Page.toSvg <$> Page.fromHtml el
+    Just el -> show <$> Page.toSvg <$> Page.fromHtml fontResolver el
 
 main :: Effect Unit
 main = setGlobalVariable "$kissvg" {renderSvg}

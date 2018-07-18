@@ -8,21 +8,29 @@ async function getGenericFonts() {
             chrome.fontSettings.getFont({genericFamily}, font => {
                 if (chrome.runtime.lastError)
                     reject(chrome.runtime.lastError)
-                resolve({genericFamily, font: font.fontId})
+                resolve({familyName: genericFamily, fontName: font.fontId})
             })
         })
     })
-    return await Promise.all(promises)
+    
+    const fonts = await Promise.all(promises)
+
+    // Add alternate spelling for sansserif
+    const sansserif = fonts.find(f => f.familyName == 'sansserif')
+    if (sansserif) {
+        fonts.push({familyName: 'sans-serif', fontName: sansserif.fontName})
+    }
+    return fonts
 }
 
-async function executeAsyncScript(tabId, file, action) {
+async function executeAsyncScript(tabId, file, action, params) {
     return new Promise((resolve, reject) => {
 
-        const actionRunner = async function(extensionId, action) {
+        const actionRunner = async function(extensionId, action, params) {
             const result = {};
             try {
                 const actionFn = action.split('.').reduce((o, n) => o[n], window);
-                result.value = await actionFn();
+                result.value = await actionFn(params)();
             } catch(e) {
                 result.error = e.message;
             } finally {
@@ -42,7 +50,7 @@ async function executeAsyncScript(tabId, file, action) {
         chrome.tabs.executeScript(tabId, {file}, () => {
             chrome.runtime.onMessage.addListener(responseListener)
             const extId = chrome.runtime.id
-            const code = `(${actionRunner.toString()})("${extId}", "${action}")`
+            const code = `(${actionRunner.toString()})("${extId}", "${action}", ${JSON.stringify(params)})`
             chrome.tabs.executeScript(tabId, {code})
         })
     })
@@ -52,7 +60,7 @@ chrome.browserAction.onClicked.addListener(async tab => {
     const genericFonts = await getGenericFonts()
     const scriptFile = 'dist/PageScript.js'
     const action = '$kissvg.renderSvg'
-    const svg = await executeAsyncScript(tab.id, scriptFile, action)
+    const svg = await executeAsyncScript(tab.id, scriptFile, action, genericFonts)
     const svgDataUrl = "data:image/svg+xml;utf8," + svg    
     chrome.downloads.download({
         url: svgDataUrl,

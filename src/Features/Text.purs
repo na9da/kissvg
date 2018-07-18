@@ -13,6 +13,8 @@ import Data.String.Regex.Flags as Regex.Flags
 import Data.Traversable (traverse)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
+import Effect.Console (logShow)
+import FontResolver (FontResolver)
 import Helpers.CSS (buildCss, css, getComputedStyle, getPropertyValue, isProperty, singleQuote)
 import Helpers.DOM (innerText, parentElement)
 import Helpers.DOM as DOM
@@ -45,12 +47,12 @@ newtype Text = Text
 text :: Array Line -> TextStyle -> Text
 text lines style = Text {lines, style}
 
-getTextStyle :: HTMLElement -> Aff TextStyle
-getTextStyle el = do
+getTextStyle :: FontResolver -> HTMLElement -> Aff TextStyle
+getTextStyle resolveFont el = do
   css <- getComputedStyle el
   textStyle
     <$> getPropertyValue "font-size" css
-    <*> getPropertyValue "font-family" css
+    <*> (resolveFont <$> getPropertyValue "font-family" css)
     <*> getPropertyValue "font-weight" css
     <*> getPropertyValue "font-style" css
     <*> getPropertyValue "color" css
@@ -168,13 +170,13 @@ normalizeSpace node =
         pure $ snoc (fromMaybe [] (init lines)) last'
         
 
-fromHtml :: Node -> Aff (Maybe Text)
-fromHtml node = do
+fromHtml :: FontResolver -> Node -> Aff (Maybe Text)
+fromHtml fontResolver node = do
   lines <- normalizeSpace node =<< Range.getWrappedLines node
   case lines of
     [] -> pure Nothing
     ls -> do
-      style <- getTextStyle =<< parentElement node
+      style <- getTextStyle fontResolver =<< parentElement node
       pure $ Just (text lines style)
 
 toSvg :: Text -> Maybe SVG

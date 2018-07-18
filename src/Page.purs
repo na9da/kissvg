@@ -13,6 +13,7 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Features.Text (Text)
 import Features.Text as Text
+import FontResolver (FontResolver)
 import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, isProperty)
 import Helpers.CSS as CSS
 import Helpers.DOM (scrollHeight, scrollWidth)
@@ -76,23 +77,23 @@ walkDom m bbox node =
     clipBoundingBox = intersection bbox
     childNodes = liftEffect (Node.childNodes node >>= NodeList.toArray)
 
-featureFromHtml :: Node -> Aff (Maybe Feature)
-featureFromHtml node =
+featureFromHtml :: FontResolver -> Node -> Aff (Maybe Feature)
+featureFromHtml fontResolver node =
   case nodeType of
-    TextNode -> (map TextFeature) <$> Text.fromHtml node
+    TextNode -> (map TextFeature) <$> Text.fromHtml fontResolver node
     _ -> pure Nothing
   where
     nodeType = unsafePartial (Node.nodeType node)
     
 
-fromHtml :: HTMLElement -> Aff Page
-fromHtml el =
+fromHtml :: FontResolver -> HTMLElement -> Aff Page
+fromHtml fontResolver el =
   lift3 page (scrollWidth el) (scrollHeight el) features
   where
     features = do
       bbox <- getBoundingBox el
-      catMaybes <$> walkDom featureFromHtml bbox node
-    node = HMTLElement.toNode el      
+      catMaybes <$> walkDom (featureFromHtml fontResolver) bbox node
+    node = HMTLElement.toNode el
 
 featureToSvg :: Feature -> Maybe SVG
 featureToSvg = case _ of
