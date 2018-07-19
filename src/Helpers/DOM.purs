@@ -5,13 +5,15 @@ module Helpers.DOM ( scrollWidth
                    , y
                    , x
                    , querySelector
+                   , getImageDimension
                    ) where
 
 import Prelude
 
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, catchError)
+import Effect.Aff.Compat (EffectFnAff, fromEffectFnAff)
 import Effect.Class (liftEffect)
 import Web.DOM (Node)
 import Web.HTML (HTMLElement)
@@ -37,6 +39,12 @@ x = liftEffect <<< xImpl
 querySelector :: String -> Aff (Maybe HTMLElement)
 querySelector = liftEffect <<< querySelectorImpl Nothing Just
 
+getImageDimension :: String -> Aff (Maybe {width :: Number, height :: Number})
+getImageDimension url = 
+  catchError
+    (Just <$> (fromEffectFnAff $ getImageDimensionImpl url))
+    (const (pure Nothing))
+
 foreign import scrollWidthImpl :: HTMLElement -> Effect Number
 foreign import scrollHeightImpl :: HTMLElement -> Effect Number
 foreign import parentElementImpl :: Node -> Effect HTMLElement
@@ -49,4 +57,4 @@ foreign import querySelectorImpl
   -> (a -> Maybe a)
   -> String
   -> Effect (Maybe HTMLElement)
-
+foreign import getImageDimensionImpl :: String -> EffectFnAff {width :: Number, height :: Number}

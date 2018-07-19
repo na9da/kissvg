@@ -6,11 +6,14 @@ import Prelude
 
 import BoundingBox (BoundingBox, getBoundingBox, hasOverlap, intersection)
 import Control.Apply (lift3)
-import Data.Array (catMaybes, concat, cons, elem)
+import Data.Array (catMaybes, concat, cons, elem, length, range, zip)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
+import Features.Box (Box)
+import Features.Box as Box
 import Features.Text (Text)
 import Features.Text as Text
 import FontResolver (FontResolver)
@@ -31,6 +34,7 @@ import Web.HTML.HTMLElement as HTMLElement
 
 data Feature
   = TextFeature Text
+  | BoxFeature Box
 
 newtype Page = Page
   { width :: Number
@@ -81,6 +85,7 @@ featureFromHtml :: FontResolver -> Node -> Aff (Maybe Feature)
 featureFromHtml fontResolver node =
   case nodeType of
     TextNode -> (map TextFeature) <$> Text.fromHtml fontResolver node
+    ElementNode -> (map BoxFeature) <$> Box.fromHtml node
     _ -> pure Nothing
   where
     nodeType = unsafePartial (Node.nodeType node)
@@ -95,17 +100,19 @@ fromHtml fontResolver el =
       catMaybes <$> walkDom (featureFromHtml fontResolver) bbox node
     node = HMTLElement.toNode el
 
-featureToSvg :: Feature -> Maybe SVG
-featureToSvg = case _ of
+featureToSvg :: Tuple Int Feature -> Maybe SVG
+featureToSvg (Tuple id f) = case f of
   TextFeature text -> Text.toSvg text
+  BoxFeature box -> Box.toSvg id box
 
 toSvg :: Page -> SVG
 toSvg (Page p) = svg attrs (elements children)
   where
-    children = catMaybes $ featureToSvg <$> p.features
+    children = catMaybes $ featureToSvg <$> indexed p.features
     attrs = [ attr "width" (show p.width <> "px")
             , attr "height" (show p.height <> "px")
             , attr "xmlns" "http://www.w3.org/2000/svg"
             , attr "xmlns:xlink" "http://www.w3.org/1999/xlink"
             , attr "version" "1.1"
             ]
+    indexed xs = zip (range 0 (length xs)) xs

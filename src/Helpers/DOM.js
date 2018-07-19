@@ -68,3 +68,19 @@ exports.querySelectorImpl = function(Nothing) {
         }
     }
 }
+
+exports.getImageDimensionImpl = function(url) {
+    return function(onError, onSuccess) {
+        const img = new Image()
+        img.addEventListener('load', function() {
+            onSuccess({width: img.naturalWidth, height: img.naturalHeight})
+        })
+        img.addEventListener('error', function() {
+            onError(new Error("failed to load image " + url))
+        })
+        img.src = url
+        return function(cancelError, onCancellerError, onCancellerSuccess) {
+            onCancellerSuccess()
+        }
+    }
+}

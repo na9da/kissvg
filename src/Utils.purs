@@ -3,7 +3,7 @@ module Utils where
 import Prelude
 
 import Data.Either (fromRight)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.Regex (Regex)
 import Data.String.Regex as Regex
 import Data.String.Regex.Flags (RegexFlags)
@@ -24,6 +24,9 @@ orM m1 m2 = m1 >>= case _ of
 
 parseFloat :: String -> Maybe Number
 parseFloat = parseFloatImpl Nothing Just
+
+parseNumber :: Number -> String -> Number
+parseNumber default = fromMaybe default <<< parseFloat
 
 regex :: String -> RegexFlags -> Regex
 regex r flags = unsafePartial $ fromRight $ Regex.regex r flags
