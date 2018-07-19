@@ -2,15 +2,18 @@ module Features.Box where
 
 import Prelude
 
-import BoundingBox (BoundingBox, getBoundingBox)
+import BoundingBox (BoundingBox(..), getBoundingBox)
 import Control.Apply (lift2, lift4)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust, isJust)
 import Effect.Aff (Aff)
-import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, getPropertyValue, parseBackgroundUrl)
+import Helpers.CSS (CSSStyleDeclaration, Position(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parsePosition, transparentColor)
 import Helpers.DOM (getImageDimension)
-import SVG (SVG)
-import Text.Smolder.Markup (Markup, empty)
-import Utils (parseNumber)
+import Partial.Unsafe (unsafePartial)
+import Text.Smolder.Markup (Markup, attribute, empty, (!))
+import Text.Smolder.SVG (g, image, pattern, rect)
+import Text.Smolder.SVG as SVG
+import Text.Smolder.SVG.Attributes (clipPath, fill, height, patternUnits, rx, ry, stroke, strokeWidth, width, x, y)
+import Utils (parseNumber, px)
 import Web.DOM (Node)
 import Web.HTML (HTMLElement)
 import Web.HTML.HTMLElement as HTMLElement
@@ -92,5 +95,100 @@ fromHtml node =
     Nothing -> pure Nothing
     Just el -> Just <$> lift2 box (getBoundingBox el) (getBoxStyle el)
 
+drawRect :: BoundingBox -> Markup Unit
+drawRect (BoundingBox b) = rect ! attrs
+  where attrs = x (px b.left)
+         <> y (px b.top)
+         <> width (px b.width)
+         <> height (px b.height)
+
+drawFillRect ::  BoundingBox -> String -> Markup Unit
+drawFillRect bbox fillColor = drawRect bbox ! fill fillColor
+
+drawClipRect :: String -> Box -> Markup Unit
+drawClipRect clipId (Box {bbox, style}) =
+  SVG.clipPath ! attribute "id" clipId $
+    drawRect bbox ! rx (px corner) ! ry (px corner)
+  where
+    corner = style.corners.tl
+
+drawBorderRect :: BoundingBox -> Border -> Markup Unit
+drawBorderRect (BoundingBox b) border =
+  drawRect borderBox ! strokeWidth (px border.width) ! stroke border.color ! fill "none"
+  where
+    borderBox =
+      BoundingBox { left: b.left + border.width / 2.0
+                  , top: b.top  + border.width / 2.0
+                  , width: b.width - border.width
+                  , height: b.height - border.width
+                  }
+      
+drawBackgroundBox :: String -> BoundingBox -> _ -> Markup Unit
+drawBackgroundBox patId bbox@(BoundingBox b) style = do
+  pattern ! patternAttrs $ (image ! imageAttrs $ empty)
+  drawRect bbox ! fill patternUrl
+  where
+    patternAttrs = attribute "id" patId
+                   <> patternUnits "userSpaceOnUse"
+                   <> width (px patternWidth)
+                   <> height (px patternHeight)
+                   <> x (px $ b.left + borders.left.width + xoff)
+                   <> y (px $ b.top + borders.top.width + yoff)
+    patternWidth =
+      if isRepeatX backgroundImage.repeat
+      then backgroundImage.width
+      else b.width
+
+    patternHeight =
+      if isRepeatY backgroundImage.repeat
+      then backgroundImage.height
+      else b.height
+
+    xoff = case parsePosition backgroundImage.position.x of
+      Just (Percentage p) -> pcnt p b.width - pcnt p backgroundImage.width
+      Just (Pixel p) -> p
+      Nothing -> 0.0
+
+    yoff = case parsePosition backgroundImage.position.y of
+      Just (Percentage p) -> pcnt p b.height - pcnt p backgroundImage.height
+      Just (Pixel p) -> p
+      Nothing -> 0.0
+
+    pcnt p num = p * num / 100.0
+
+    imageAttrs = attribute "xlink:href" backgroundImage.url
+                 <> x (px 0.0)
+                 <> y (px 0.0)
+                 <> width (px backgroundImage.width)
+                 <> height (px backgroundImage.height)
+
+    backgroundImage = unsafePartial $ fromJust style.backgroundImage
+    borders = style.borders
+    patternUrl = "url(" <> "#" <> patId <> ")"
+
+
 toSvg :: Int -> Box -> Markup Unit
-toSvg id box = empty
+toSvg id box@(Box {bbox, style}) = g $ do
+  if requireClipping
+    then drawClipRect clipId box
+    else empty
+  if style.backgroundColor /= transparentColor
+    then drawFillRect bbox style.backgroundColor ! clipReference
+    else empty
+  if hasBackgroundImage
+     then drawBackgroundBox patternId bbox style ! clipReference
+     else empty
+  if hasBorders
+     then drawBorderRect bbox style.borders.top ! clipReference
+     else empty
+  where
+    requireClipping = style.corners.tl /= 0.0
+    hasBorders =
+      let {width, color} = style.borders.top
+      in width /= 0.0 && color /= transparentColor
+    hasBackgroundImage = isJust style.backgroundImage
+    clipReference = if requireClipping
+                      then clipPath ("url(" <> "#" <> clipId <> ")")
+                      else mempty
+    clipId = "clip" <> show id
+    patternId = "pat" <> show id

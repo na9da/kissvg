@@ -1,5 +1,6 @@
 module Helpers.CSS ( CSSStyleDeclaration
                    , CSS
+                   , Position(..)
                    , css
                    , buildCss
                    , singleQuote
@@ -8,6 +9,9 @@ module Helpers.CSS ( CSSStyleDeclaration
                    , isProperty
                    , parseBackgroundUrl
                    , transparentColor
+                   , isRepeatX
+                   , isRepeatY
+                   , parsePosition
                    ) where
 
 import Prelude
@@ -22,7 +26,7 @@ import Data.String.Regex.Flags as Regex.Flags
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
-import Utils (regex)
+import Utils (parseFloat, regex)
 import Web.HTML (HTMLElement)
 
 data CSS = CSS String String
@@ -64,6 +68,41 @@ parseBackgroundUrl val =
       url <- Array.NonEmpty.last matches
       pure url
 
+isRepeatX :: String -> Boolean
+isRepeatX s =
+  case String.split (String.Pattern " ") s of
+    [x] -> x == "repeat" || x == "repeat-x"
+    [x, _] -> x == "repeat" || x == "repeat-x"
+    _ -> false
+
+isRepeatY :: String -> Boolean
+isRepeatY s =
+  case String.split (String.Pattern " ") s of
+    [y] -> y == "repeat" || y == "repeat-y"
+    [_, y] -> y == "repeat" || y == "repeat-y"
+    _ -> false
+
+data Position
+  = Percentage Number
+  | Pixel Number
+
+parsePosition :: String -> Maybe Position
+parsePosition s = do
+  matches <- Regex.match r s
+  case Array.NonEmpty.toArray matches of
+    [Just parsed, _, Just num, _, Just u] -> do
+      unit <- decodeUnit u
+      x <- parseFloat num
+      let rest = String.drop (String.length parsed) s
+      Just (unit x)
+    _ -> Nothing
+  where
+    r = regex "^((\\d+(\\.\\d+)?)(%|px))" Regex.Flags.noFlags
+    decodeUnit = case _ of
+      "%" -> Just Percentage
+      "px" -> Just Pixel
+      _ -> Nothing
+    
 foreign import getComputedStyleImpl :: HTMLElement -> Effect CSSStyleDeclaration
 foreign import getPropertyValueImpl :: String -> CSSStyleDeclaration -> Effect String
 
