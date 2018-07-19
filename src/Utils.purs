@@ -31,6 +31,9 @@ parseNumber default = fromMaybe default <<< parseFloat
 regex :: String -> RegexFlags -> Regex
 regex r flags = unsafePartial $ fromRight $ Regex.regex r flags
 
+px :: Number -> String
+px n = show n <> "px"
+
 foreign import parseFloatImpl :: Maybe Number -> (Number -> Maybe Number) -> String -> Maybe Number
 
 

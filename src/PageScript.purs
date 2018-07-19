@@ -10,6 +10,7 @@ import FontResolver (Font)
 import FontResolver as FontResolver
 import Helpers.DOM as DOM
 import Page as Page
+import Text.Smolder.Renderer.String (render)
 
 foreign import setGlobalVariable :: forall a. String -> a -> Effect Unit
 
@@ -18,7 +19,7 @@ renderSvg fonts = Promise.fromAff $ do
   let fontResolver = FontResolver.create fonts
   DOM.querySelector "html" >>= case _ of
     Nothing -> pure ""
-    Just el -> show <$> Page.toSvg <$> Page.fromHtml fontResolver el
+    Just el -> render <$> Page.toSvg <$> Page.fromHtml fontResolver el
 
 main :: Effect Unit
 main = setGlobalVariable "$kissvg" {renderSvg}

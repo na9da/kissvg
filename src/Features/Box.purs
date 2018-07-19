@@ -9,6 +9,7 @@ import Effect.Aff (Aff)
 import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, getPropertyValue, parseBackgroundUrl)
 import Helpers.DOM (getImageDimension)
 import SVG (SVG)
+import Text.Smolder.Markup (Markup, empty)
 import Utils (parseNumber)
 import Web.DOM (Node)
 import Web.HTML (HTMLElement)
@@ -91,5 +92,5 @@ fromHtml node =
     Nothing -> pure Nothing
     Just el -> Just <$> lift2 box (getBoundingBox el) (getBoxStyle el)
 
-toSvg :: Int -> Box -> Maybe SVG
-toSvg id box = Nothing
+toSvg :: Int -> Box -> Markup Unit
+toSvg id box = empty

@@ -8,7 +8,7 @@ import BoundingBox (BoundingBox, getBoundingBox, hasOverlap, intersection)
 import Control.Apply (lift3)
 import Data.Array (catMaybes, concat, cons, elem, length, range, zip)
 import Data.Maybe (Maybe(..))
-import Data.Traversable (traverse)
+import Data.Traversable (for_, traverse)
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -21,8 +21,11 @@ import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, isProperty)
 import Helpers.CSS as CSS
 import Helpers.DOM (scrollHeight, scrollWidth)
 import Partial.Unsafe (unsafePartial)
-import SVG (SVG, attr, elements, svg)
-import Utils (orM)
+import Text.Smolder.HTML.Attributes (xmlns)
+import Text.Smolder.Markup (Markup, attribute, (!))
+import Text.Smolder.SVG (svg)
+import Text.Smolder.SVG.Attributes (height, version, width)
+import Utils (orM, px)
 import Web.DOM (Node)
 import Web.DOM.Node (nodeName)
 import Web.DOM.Node as Node
@@ -100,19 +103,17 @@ fromHtml fontResolver el =
       catMaybes <$> walkDom (featureFromHtml fontResolver) bbox node
     node = HMTLElement.toNode el
 
-featureToSvg :: Tuple Int Feature -> Maybe SVG
-featureToSvg (Tuple id f) = case f of
-  TextFeature text -> Text.toSvg text
+featureToSvg :: Tuple Int Feature -> Markup Unit
+featureToSvg (Tuple id feature) = case feature of
+  TextFeature text -> Text.toSvg text 
   BoxFeature box -> Box.toSvg id box
-
-toSvg :: Page -> SVG
-toSvg (Page p) = svg attrs (elements children)
+  
+toSvg :: Page -> Markup Unit
+toSvg (Page p) = svg ! attrs $ for_ (indexed p.features) featureToSvg
   where
-    children = catMaybes $ featureToSvg <$> indexed p.features
-    attrs = [ attr "width" (show p.width <> "px")
-            , attr "height" (show p.height <> "px")
-            , attr "xmlns" "http://www.w3.org/2000/svg"
-            , attr "xmlns:xlink" "http://www.w3.org/1999/xlink"
-            , attr "version" "1.1"
-            ]
+    attrs = width (px p.width)
+         <> height (px p.height)
+         <> xmlns "http://www.w3.org/2000/svg"
+         <> attribute "xmlns:xlink" "http://www.w3.org/1999/xlink"
+         <> version "1.1"
     indexed xs = zip (range 0 (length xs)) xs

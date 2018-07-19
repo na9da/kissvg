@@ -7,23 +7,22 @@ import Prelude
 
 import BoundingBox (BoundingBox(..))
 import Data.Array (cons, init, last, snoc, uncons)
-import Data.Maybe (Maybe(..), fromJust, fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.Regex as Regex
 import Data.String.Regex.Flags as Regex.Flags
-import Data.Traversable (traverse)
+import Data.Traversable (for_, traverse)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
-import Effect.Console (logShow)
 import FontResolver (FontResolver)
-import Helpers.CSS (buildCss, css, getComputedStyle, getPropertyValue, isProperty, singleQuote)
+import Helpers.CSS (getComputedStyle, getPropertyValue, isProperty, singleQuote)
 import Helpers.DOM (innerText, parentElement)
 import Helpers.DOM as DOM
 import Helpers.Range (Line(..))
 import Helpers.Range as Range
-import Partial.Unsafe (unsafePartial)
-import SVG (SVG, attr, content, elements)
-import SVG as SVG
-import Utils (parseFloat, regex)
+import Text.Smolder.Markup (Markup, attribute, text, (!))
+import Text.Smolder.SVG as SVG
+import Text.Smolder.SVG.Attributes (fill, fontFamily, fontSize, fontStyle, fontWeight, x, y)
+import Utils (parseNumber, px, regex)
 import Web.DOM (Node)
 import Web.DOM.Node (nextSibling, previousSibling)
 import Web.DOM.Text (wholeText)
@@ -32,7 +31,7 @@ import Web.HTML (HTMLElement)
 import Web.HTML.HTMLElement as HTMLElement
 
 type TextStyle =
-  { fontSize :: String
+  { fontSize :: Number
   , fontFamily :: String
   , fontWeight :: String
   , fontStyle :: String
@@ -44,14 +43,11 @@ newtype Text = Text
   , style :: TextStyle
   }
 
-text :: Array Line -> TextStyle -> Text
-text lines style = Text {lines, style}
-
 getTextStyle :: FontResolver -> HTMLElement -> Aff TextStyle
 getTextStyle resolveFont el = do
   css <- getComputedStyle el
   textStyle
-    <$> getPropertyValue "font-size" css
+    <$> (parseNumber 0.0 <$> getPropertyValue "font-size" css)
     <*> (resolveFont <$> getPropertyValue "font-family" css)
     <*> getPropertyValue "font-weight" css
     <*> getPropertyValue "font-style" css
@@ -178,24 +174,26 @@ fromHtml fontResolver node = do
     ls -> do
       style <- getTextStyle fontResolver =<< parentElement node
       pure $ Just (text lines style)
-
-toSvg :: Text -> Maybe SVG
-toSvg (Text {lines, style}) = 
-  Just $ case lines of
-    [Line str bbox] -> SVG.text (positionAttrs bbox <> styleAttrs) (content str)
-    lines' -> SVG.text styleAttrs (elements (tspan <$> lines'))
   where
-    tspan (Line str bbox) = SVG.tspan (positionAttrs bbox) str
-    positionAttrs (BoundingBox b) = unsafePartial $
-      [ attr "x" (show b.left)
-      , attr "y" (show (b.top + fromJust (parseFloat style.fontSize)))
-      ]
-    styleAttrs =
-      [ attr "style" $ buildCss [ css "font-size" style.fontSize
-                                , css "font-weight" style.fontWeight
-                                , css "font-style" style.fontStyle
-                                ]
-      , attr "font-family" (singleQuote style.fontFamily)
-      , attr "fill" style.color
-      , attr "xml:space" "preserve"
-      ]
+    text :: Array Line -> TextStyle -> Text
+    text lines style = Text {lines, style}
+
+toSvg :: Text -> Markup Unit
+toSvg (Text {lines, style}) =
+  case lines of
+    [Line l bbox] -> SVG.text ! (positionAttrs bbox <> styleAttrs) $ text l
+    lines' -> SVG.text ! styleAttrs $ for_ lines' tspan
+  where
+    tspan (Line l bbox) = SVG.tspan ! (positionAttrs bbox) $ text l
+
+    positionAttrs (BoundingBox b) = 
+      x (px b.left) <>
+      y (px $ b.top + style.fontSize)
+
+    styleAttrs =  fontFamily (singleQuote style.fontFamily)
+               <> fill style.color
+               <> attribute "xml:space" "preserve"
+               <> fontSize (px style.fontSize)
+               <> fontWeight style.fontWeight
+               <> fontStyle style.fontStyle
+      
