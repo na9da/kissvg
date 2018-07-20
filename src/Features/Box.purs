@@ -4,8 +4,9 @@ import Prelude
 
 import BoundingBox (BoundingBox(..), getBoundingBox)
 import Control.Apply (lift2, lift3, lift4)
+import Data.Array (all)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromJust, isJust)
+import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
@@ -197,8 +198,8 @@ drawBackgroundBox patId bbox@(BoundingBox b) style = do
     patternUrl = "url(" <> "#" <> patId <> ")"
 
 
-toSvg :: Int -> Box -> Markup Unit
-toSvg id box@(Box {bbox, style}) = g $ do
+drawBox :: Int -> Box -> Markup Unit
+drawBox id box@(Box {bbox, style}) = g $ do
   if requireClipping
     then drawClipRect clipId box
     else empty
@@ -206,11 +207,11 @@ toSvg id box@(Box {bbox, style}) = g $ do
     then drawFillRect bbox style.backgroundColor ! clipReference
     else empty
   if hasBackgroundImage
-     then drawBackgroundBox patternId bbox style ! clipReference
-     else empty
+    then drawBackgroundBox patternId bbox style ! clipReference
+    else empty
   if hasBorders
-     then drawBorderRect bbox style.borders.top ! clipReference
-     else empty
+    then drawBorderRect bbox style.borders.top ! clipReference
+    else empty
   where
     requireClipping = style.corners.tl /= 0.0
     hasBorders =
@@ -222,3 +223,24 @@ toSvg id box@(Box {bbox, style}) = g $ do
                       else mempty
     clipId = "clip" <> show id
     patternId = "pat" <> show id
+
+toSvg :: Int -> Box -> Markup Unit
+toSvg id box@(Box {bbox, style}) =
+  case box of
+    _ | isInvisible -> empty
+    _ | otherwise -> drawBox id box
+  where
+    isInvisible =
+      allBordersSame
+      && (borders.top.width == 0.0 || borders.top.color == transparentColor)
+      && style.backgroundColor == transparentColor
+      && isNothing style.backgroundImage
+
+    allBordersSame =
+      let {top, right, bottom, left} = borders
+      in all (eq top) [right, bottom, left]
+
+    borders = style.borders
+    
+      
+    
