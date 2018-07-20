@@ -90,8 +90,10 @@ getImage :: HTMLElement -> Aff (Maybe _)
 getImage el = case HTMLImageElement.fromNode (HTMLElement.toNode el) of
   Nothing -> pure Nothing
   Just img -> do
-    let position = { x: "0px", y: "0px" }
-    Just <$> (lift3 {position, repeat: "", size: "", url: _, width: _, height: _}
+    BoundingBox bbox <- getBoundingBox el
+    let size = px bbox.width <> " " <> px bbox.height
+        position = { x: "0px", y: "0px" }
+    Just <$> (lift3 {position, repeat: "", size, url: _, width: _, height: _}
                         (src img)
                         (naturalWidth img)
                         (naturalHeight img))
