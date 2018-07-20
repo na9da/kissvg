@@ -4,9 +4,10 @@ import Prelude
 
 import BoundingBox (BoundingBox(..), getBoundingBox)
 import Control.Apply (lift2, lift3, lift4)
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromJust, isJust)
-import Debug.Trace (trace)
 import Effect.Aff (Aff)
+import Effect.Class (liftEffect)
 import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
 import Helpers.DOM (getImageDimension)
 import Partial.Unsafe (unsafePartial)
@@ -18,6 +19,7 @@ import Utils (parseNumber, px)
 import Web.DOM (Node)
 import Web.HTML (HTMLElement)
 import Web.HTML.HTMLElement as HTMLElement
+import Web.HTML.HTMLImageElement as HTMLImageElement
 
 type Border = { width :: Number, color :: String }
 type BoxStyle =
@@ -83,6 +85,20 @@ getBackgroundImage css = backgroundUrl >>= case _ of
       y <- getPropertyValue "background-position-y" css
       pure $ {x, y}
 
+getImage :: HTMLElement -> Aff (Maybe _)
+getImage el = case HTMLImageElement.fromNode (HTMLElement.toNode el) of
+  Nothing -> pure Nothing
+  Just img -> do
+    let position = { x: "0px", y: "0px" }
+    Just <$> (lift3 {position, repeat: "", size: "", url: _, width: _, height: _}
+                        (src img)
+                        (naturalWidth img)
+                        (naturalHeight img))
+  where
+    src = liftEffect <<< HTMLImageElement.src
+    naturalWidth img = Int.toNumber <$> (liftEffect $ HTMLImageElement.naturalWidth img)
+    naturalHeight img = Int.toNumber<$>(liftEffect $ HTMLImageElement.naturalHeight img)
+
 getBoxStyle :: HTMLElement -> Aff BoxStyle
 getBoxStyle el = do
   css <- getComputedStyle el
@@ -90,7 +106,9 @@ getBoxStyle el = do
      (getBorders css)
      (getCorners css)
      (getPropertyValue "background-color" css)
-     (getBackgroundImage css)
+     (getBackgroundImage css >>= case _ of
+         Just bg -> pure (Just bg)
+         Nothing -> getImage el)
 
 fromHtml :: Node -> Aff (Maybe Box)
 fromHtml node = 
