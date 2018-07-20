@@ -3,10 +3,11 @@ module Features.Box where
 import Prelude
 
 import BoundingBox (BoundingBox(..), getBoundingBox)
-import Control.Apply (lift2, lift4)
+import Control.Apply (lift2, lift3, lift4)
 import Data.Maybe (Maybe(..), fromJust, isJust)
+import Debug.Trace (trace)
 import Effect.Aff (Aff)
-import Helpers.CSS (CSSStyleDeclaration, Position(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parsePosition, transparentColor)
+import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
 import Helpers.DOM (getImageDimension)
 import Partial.Unsafe (unsafePartial)
 import Text.Smolder.Markup (Markup, attribute, empty, (!))
@@ -29,6 +30,7 @@ type BoxStyle =
             , height :: Number
             , position :: { x :: String, y :: String }
             , repeat :: String
+            , size :: String
             }
  }
 
@@ -70,9 +72,10 @@ getBackgroundImage css = backgroundUrl >>= case _ of
   Just url -> getImageDimension url >>= case _ of
     Nothing -> pure Nothing
     Just {width, height} ->
-      Just <$> (lift2 { url, width, height, position: _, repeat: _ }
+      Just <$> (lift3 { url, width, height, position: _, repeat: _, size: _ }
                 getPosition
-                (getPropertyValue "background-repeat" css))
+                (getPropertyValue "background-repeat" css)
+                (getPropertyValue "background-size" css))
   where
     backgroundUrl = parseBackgroundUrl <$> getPropertyValue "background-image" css
     getPosition = do
@@ -136,21 +139,21 @@ drawBackgroundBox patId bbox@(BoundingBox b) style = do
                    <> y (px $ b.top + borders.top.width + yoff)
     patternWidth =
       if isRepeatX backgroundImage.repeat
-      then backgroundImage.width
-      else b.width
+      then bgWidth
+      else (max b.width bgWidth) - xoff
 
     patternHeight =
       if isRepeatY backgroundImage.repeat
-      then backgroundImage.height
-      else b.height
+      then bgHeight
+      else (max b.height bgHeight) - yoff
 
-    xoff = case parsePosition backgroundImage.position.x of
-      Just (Percentage p) -> pcnt p b.width - pcnt p backgroundImage.width
+    xoff = case parseUnits backgroundImage.position.x of
+      Just (Percentage p) -> pcnt p b.width - pcnt p bgWidth
       Just (Pixel p) -> p
       Nothing -> 0.0
 
-    yoff = case parsePosition backgroundImage.position.y of
-      Just (Percentage p) -> pcnt p b.height - pcnt p backgroundImage.height
+    yoff = case parseUnits backgroundImage.position.y of
+      Just (Percentage p) -> pcnt p b.height - pcnt p bgHeight
       Just (Pixel p) -> p
       Nothing -> 0.0
 
@@ -159,8 +162,17 @@ drawBackgroundBox patId bbox@(BoundingBox b) style = do
     imageAttrs = attribute "xlink:href" backgroundImage.url
                  <> x (px 0.0)
                  <> y (px 0.0)
-                 <> width (px backgroundImage.width)
-                 <> height (px backgroundImage.height)
+                 <> width (px bgWidth)
+                 <> height (px bgHeight)
+
+    bgWidth = case parseUnits backgroundImage.size of
+      Nothing -> backgroundImage.width
+      Just (Pixel p) -> p
+      Just (Percentage p) -> pcnt p b.width
+
+    bgHeight = case parseUnits backgroundImage.size of
+      Nothing -> backgroundImage.height
+      Just _ -> backgroundImage.height * bgWidth / backgroundImage.width
 
     backgroundImage = unsafePartial $ fromJust style.backgroundImage
     borders = style.borders

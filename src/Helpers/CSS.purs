@@ -1,6 +1,6 @@
 module Helpers.CSS ( CSSStyleDeclaration
                    , CSS
-                   , Position(..)
+                   , Units(..)
                    , css
                    , buildCss
                    , singleQuote
@@ -11,7 +11,7 @@ module Helpers.CSS ( CSSStyleDeclaration
                    , transparentColor
                    , isRepeatX
                    , isRepeatY
-                   , parsePosition
+                   , parseUnits
                    ) where
 
 import Prelude
@@ -82,27 +82,26 @@ isRepeatY s =
     [_, y] -> y == "repeat" || y == "repeat-y"
     _ -> false
 
-data Position
+data Units
   = Percentage Number
   | Pixel Number
 
-parsePosition :: String -> Maybe Position
-parsePosition s = do
+parseUnits :: String -> Maybe Units
+parseUnits s = do
   matches <- Regex.match r s
   case Array.NonEmpty.toArray matches of
-    [Just parsed, _, Just num, _, Just u] -> do
-      unit <- decodeUnit u
+    [_, Just num, _, Just u] -> do
+      unit <- decodeUnits u
       x <- parseFloat num
-      let rest = String.drop (String.length parsed) s
       Just (unit x)
     _ -> Nothing
   where
-    r = regex "^((\\d+(\\.\\d+)?)(%|px))" Regex.Flags.noFlags
-    decodeUnit = case _ of
+    r = regex """(-?\d+(\.\d+)?)(%|px)""" Regex.Flags.noFlags
+    decodeUnits = case _ of
       "%" -> Just Percentage
       "px" -> Just Pixel
       _ -> Nothing
-    
+
 foreign import getComputedStyleImpl :: HTMLElement -> Effect CSSStyleDeclaration
 foreign import getPropertyValueImpl :: String -> CSSStyleDeclaration -> Effect String
 
