@@ -4,7 +4,7 @@
     "description": "Convert web pages to SVG",
     "manifest_version": 2,
     "browser_action": {
-        "default_icon": "images/logo.png",
+        "default_icon": "kiss.png",
         "default_title": "Kissvg"
     },
     "background": {
