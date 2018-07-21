@@ -56,7 +56,7 @@ async function executeAsyncScript(tabId, file, action, params) {
     })
 }
 
-chrome.browserAction.onClicked.addListener(async tab => {
+async function run(tab) {
     const genericFonts = await getGenericFonts()
     const scriptFile = 'dist/PageScript.js'
     const action = '$kissvg.renderSvg'
@@ -67,4 +67,15 @@ chrome.browserAction.onClicked.addListener(async tab => {
         filename: 'out.svg',
         conflictAction: 'overwrite'
     })
+}
+
+chrome.browserAction.onClicked.addListener(async tab => {
+    try {
+        chrome.browserAction.disable(tab.id)
+        chrome.browserAction.setBadgeText({tabId: tab.id, text: '...'})        
+        await run(tab)
+    } finally {
+        chrome.browserAction.enable(tab.id)
+        chrome.browserAction.setBadgeText({tabId: tab.id, text: ''})
+    }
 })
