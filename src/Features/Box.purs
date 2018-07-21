@@ -9,6 +9,7 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
+import Global.Unsafe (unsafeEncodeURI)
 import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
 import Helpers.DOM (getImageDimension)
 import Partial.Unsafe (unsafePartial)
@@ -180,7 +181,7 @@ drawBackgroundBox patId bbox@(BoundingBox b) style = do
 
     pcnt p num = p * num / 100.0
 
-    imageAttrs = attribute "xlink:href" backgroundImage.url
+    imageAttrs = attribute "xlink:href" (unsafeEncodeURI backgroundImage.url)
                  <> x (px 0.0)
                  <> y (px 0.0)
                  <> width (px bgWidth)
