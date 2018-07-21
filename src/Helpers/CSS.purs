@@ -22,6 +22,7 @@ import Data.Maybe (Maybe(..))
 import Data.String (replaceAll)
 import Data.String as String
 import Data.String.Regex as Regex
+import Data.String.Regex.Flags (ignoreCase, noFlags)
 import Data.String.Regex.Flags as Regex.Flags
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -70,14 +71,14 @@ parseBackgroundUrl val =
 
 isRepeatX :: String -> Boolean
 isRepeatX s =
-  case String.split (String.Pattern " ") s of
+  case Regex.split (regex "[^-0-9a-z]+" ignoreCase) s of
     [x] -> x == "repeat" || x == "repeat-x"
     [x, _] -> x == "repeat" || x == "repeat-x"
     _ -> false
 
 isRepeatY :: String -> Boolean
 isRepeatY s =
-  case String.split (String.Pattern " ") s of
+  case Regex.split (regex "[^-0-9a-z]+" ignoreCase) s of
     [y] -> y == "repeat" || y == "repeat-y"
     [_, y] -> y == "repeat" || y == "repeat-y"
     _ -> false
