@@ -162,12 +162,14 @@ drawBackgroundBox patId bbox@(BoundingBox b) style = do
     patternWidth =
       if isRepeatX backgroundImage.repeat
       then bgWidth
-      else (max b.width bgWidth) - xoff
+      else let w = max b.width bgWidth
+           in max w (w - xoff) --adjust for negative shift due to background positioning
 
     patternHeight =
       if isRepeatY backgroundImage.repeat
       then bgHeight
-      else (max b.height bgHeight) - yoff
+      else let h = max b.height bgHeight
+           in max h (h - yoff) --adjust for negative shift due to background positioning
 
     xoff = case parseUnits backgroundImage.position.x of
       Just (Percentage p) -> pcnt p b.width - pcnt p bgWidth
