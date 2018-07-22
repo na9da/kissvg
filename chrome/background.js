@@ -56,15 +56,27 @@ async function executeAsyncScript(tabId, file, action, params) {
     })
 }
 
+function generateFileName(url) {
+    let name
+    const a = document.createElement('a')
+    a.href = url
+    if (a.hostname) {
+        name = a.hostname.replace(/[.]/g, '-')
+    } else {
+        name = a.pathname.split('/').pop() || 'out'
+    }
+    return name + '.svg'
+}
+
 async function run(tab) {
     const genericFonts = await getGenericFonts()
     const scriptFile = 'dist/PageScript.js'
     const action = '$kissvg.renderSvg'
     const svg = await executeAsyncScript(tab.id, scriptFile, action, genericFonts)
-    const svgDataUrl = "data:image/svg+xml;utf8," + svg    
+    const svgDataUrl = "data:image/svg+xml;utf8," + svg
     chrome.downloads.download({
         url: svgDataUrl,
-        filename: 'out.svg',
+        filename: generateFileName(tab.url),
         conflictAction: 'overwrite'
     })
 }
