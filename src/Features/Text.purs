@@ -171,20 +171,18 @@ fromHtml fontResolver node = do
   lines <- normalizeSpace node =<< Range.getWrappedLines node
   case lines of
     [] -> pure Nothing
-    ls -> do
-      style <- getTextStyle fontResolver =<< parentElement node
-      pure $ Just (text lines style)
+    ls -> Just <$> text ls <$> (getTextStyle fontResolver =<< parentElement node)
   where
     text :: Array Line -> TextStyle -> Text
     text lines style = Text {lines, style}
 
-toSvg :: Text -> Markup Unit
-toSvg (Text {lines, style}) =
+toSvg :: Int -> Text -> Markup Unit
+toSvg id (Text {lines, style}) =
   case lines of
-    [Line l bbox] -> SVG.text ! (positionAttrs bbox <> styleAttrs) $ text l
+    [Line l b] -> SVG.text ! (positionAttrs b <> styleAttrs) $ text l
     lines' -> SVG.text ! styleAttrs $ for_ lines' tspan
   where
-    tspan (Line l bbox) = SVG.tspan ! (positionAttrs bbox) $ text l
+    tspan (Line l b) = SVG.tspan ! (positionAttrs b) $ text l
 
     positionAttrs (BoundingBox b) = 
       x (px b.left) <>
@@ -196,4 +194,4 @@ toSvg (Text {lines, style}) =
                <> fontSize (px style.fontSize)
                <> fontWeight style.fontWeight
                <> fontStyle style.fontStyle
-      
+

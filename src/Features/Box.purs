@@ -3,14 +3,14 @@ module Features.Box where
 import Prelude
 
 import BoundingBox (BoundingBox(..), getBoundingBox)
-import Control.Apply (lift2, lift3, lift4)
+import Control.Apply (lift3, lift4)
 import Data.Array (all)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Global.Unsafe (unsafeEncodeURI)
-import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
+import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isProperty, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
 import Helpers.DOM (getImageDimension)
 import Partial.Unsafe (unsafePartial)
 import Text.Smolder.Markup (Markup, attribute, empty, (!))
@@ -41,10 +41,11 @@ type BoxStyle =
 newtype Box = Box
   { bbox :: BoundingBox
   , style :: BoxStyle
+  , clipChildren :: Boolean
   }
 
-box :: BoundingBox -> BoxStyle -> Box
-box bbox style = Box {bbox, style}
+box :: BoundingBox -> BoxStyle -> Boolean -> Box
+box bbox style clipChildren = Box {bbox, style, clipChildren}
 
 getBorders :: CSSStyleDeclaration -> Aff _
 getBorders css =
@@ -94,10 +95,11 @@ getImage el = case HTMLImageElement.fromNode (HTMLElement.toNode el) of
     BoundingBox bbox <- getBoundingBox el
     let size = px bbox.width <> " " <> px bbox.height
         position = { x: "0px", y: "0px" }
-    Just <$> (lift3 {position, repeat: "", size, url: _, width: _, height: _}
-                        (src img)
-                        (naturalWidth img)
-                        (naturalHeight img))
+    width <- naturalWidth img
+    height <- naturalHeight img
+    if (width == 0.0 || height == 0.0)
+      then pure Nothing
+      else Just <$> ({position, width, height, repeat: "", size, url: _} <$> src img)
   where
     src = liftEffect <<< HTMLImageElement.src
     naturalWidth img = Int.toNumber <$> (liftEffect $ HTMLImageElement.naturalWidth img)
@@ -118,8 +120,12 @@ fromHtml :: Node -> Aff (Maybe Box)
 fromHtml node = 
   case HTMLElement.fromNode node of
     Nothing -> pure Nothing
-    Just el -> Just <$> lift2 box (getBoundingBox el) (getBoxStyle el)
-
+    Just el -> Just <$> lift3 box (getBoundingBox el) (getBoxStyle el) (clipChildren el)
+  where
+    clipChildren el = do
+      css <- getComputedStyle el
+      not <$> isProperty "overflow" "visible" css
+      
 drawRect :: BoundingBox -> Markup Unit
 drawRect (BoundingBox b) = rect ! attrs
   where attrs = x (px b.left)
@@ -229,23 +235,41 @@ drawBox id box@(Box {bbox, style}) = g $ do
     clipId = "clip" <> show id
     patternId = "pat" <> show id
 
-toSvg :: Int -> Box -> Markup Unit
-toSvg id box@(Box {bbox, style}) =
-  case box of
-    _ | isInvisible -> empty
-    _ | otherwise -> drawBox id box
+toSvg :: Int -> Box -> Markup Unit -> Markup Unit
+toSvg id box@(Box {bbox, style, clipChildren}) children = do
+  if isInvisible
+    then empty
+    else drawBox id box
+  if clipChildren
+    then clip children
+    else children
   where
     isInvisible =
-      allBordersSame
+      (width == 0.0 || height == 0.0) ||
+      (allBordersSame
       && (borders.top.width == 0.0 || borders.top.color == transparentColor)
       && style.backgroundColor == transparentColor
-      && isNothing style.backgroundImage
+      && isNothing style.backgroundImage)
+
+    width =
+      let BoundingBox {width} = bbox
+      in width
+
+    height =
+      let BoundingBox {height} = bbox
+      in height
 
     allBordersSame =
       let {top, right, bottom, left} = borders
       in all (eq top) [right, bottom, left]
 
     borders = style.borders
-    
-      
-    
+
+    clip markup = do
+       SVG.clipPath ! attribute "id" clipId $ (drawRect bbox)
+       markup ! clipReference
+
+    clipId = "bclip" <> show id
+    clipReference = clipPath ("url(#" <> clipId <> ")")
+
+

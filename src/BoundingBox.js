@@ -1,23 +1,27 @@
 "use strict";
 
-exports.getBoundingBoxImpl = function(el) {
+exports.getBoundingBoxImpl = function(node) {
     return function() {
-        const rect = el.getBoundingClientRect()
-        const css = window.getComputedStyle(el)
 
+        var rect, scrollWidth, scrollHeight, css
+        rect = node.getBoundingClientRect()
+        scrollWidth = node.scrollWidth
+        scrollHeight = node.scrollHeight
+        css = window.getComputedStyle(node)
+            
         var left = rect.left + window.scrollX,
             top = rect.top + window.scrollY,
             width, height;
         
         if (css.getPropertyValue('overflow-x') == 'visible') {
-            if (el.scrollWidth > rect.width) {
-                width = el.scrollWidth
+            if (scrollWidth > rect.width) {
+                width = scrollWidth
             }
         } 
 
         if (css.getPropertyValue('overflow-y') == 'visible') {
-            if (el.scrollHeight > rect.height) {
-                height = el.scrollHeight
+            if (scrollHeight > rect.height) {
+                height = scrollHeight
             }
         }
 
