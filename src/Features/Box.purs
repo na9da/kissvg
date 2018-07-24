@@ -3,21 +3,21 @@ module Features.Box where
 import Prelude
 
 import BoundingBox (BoundingBox(..), getBoundingBox)
-import Control.Apply (lift3, lift4)
+import Control.Apply (lift2, lift3, lift4)
 import Data.Array (all)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromJust, isJust, isNothing)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, isJust, isNothing)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Global.Unsafe (unsafeEncodeURI)
-import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isProperty, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
+import Helpers.CSS (CSSStyleDeclaration, Units(..), getComputedStyle, getPropertyValue, isRepeatX, isRepeatY, parseBackgroundUrl, parseUnits, transparentColor)
 import Helpers.DOM (getImageDimension)
 import Partial.Unsafe (unsafePartial)
 import Text.Smolder.Markup (Markup, attribute, empty, (!))
 import Text.Smolder.SVG (g, image, pattern, rect)
 import Text.Smolder.SVG as SVG
 import Text.Smolder.SVG.Attributes (clipPath, fill, height, patternUnits, rx, ry, stroke, strokeWidth, width, x, y)
-import Utils (parseNumber, px)
+import Utils (lift6, parseInt, parseNumber, px)
 import Web.DOM (Node)
 import Web.HTML (HTMLElement)
 import Web.HTML.HTMLElement as HTMLElement
@@ -36,16 +36,58 @@ type BoxStyle =
             , repeat :: String
             , size :: String
             }
+ , zIndex :: Int
+ , overflow :: { x :: String, y :: String }
  }
 
 newtype Box = Box
   { bbox :: BoundingBox
   , style :: BoxStyle
-  , clipChildren :: Boolean
+  , className :: String
   }
 
-box :: BoundingBox -> BoxStyle -> Boolean -> Box
-box bbox style clipChildren = Box {bbox, style, clipChildren}
+box :: BoundingBox -> BoxStyle -> String -> Box
+box bbox style className = Box {bbox, style, className}
+
+bbox :: Box -> BoundingBox
+bbox (Box {bbox}) = bbox
+
+zIndex :: Box -> Int
+zIndex (Box {style}) = style.zIndex
+
+newStack :: Box -> Boolean
+newStack box = zIndex box > 0
+
+className :: Box -> String
+className (Box {className}) = className
+
+clipChildren :: Box -> Boolean
+clipChildren (Box {style}) =
+  style.overflow.x /= "visible" || style.overflow.y /= "visible"
+
+intersect :: BoundingBox -> Box -> BoundingBox
+intersect (BoundingBox a) (Box {bbox, style}) =
+  let BoundingBox {left, top, width, height} = bbox
+      right = left + width
+      bottom = top + height
+      aRight = a.left + a.width
+      aBottom = a.top + a.height
+      {l, w} = if style.overflow.x == "visible" 
+               then {l: a.left, w: a.width}
+               else let l = max a.left left
+                        w = if l > aRight
+                            then 0.0
+                            else min aRight right - l
+                    in {l, w}
+      {t, h} = if style.overflow.y == "visible"
+               then {t: a.top, h: a.height}
+               else let t = max a.top top
+                        h =  if t > aBottom
+                             then 0.0
+                             else min aBottom bottom - t
+                    in {t, h}
+  in BoundingBox {left: l, top: t, width: w, height: h}
+
 
 getBorders :: CSSStyleDeclaration -> Aff _
 getBorders css =
@@ -105,26 +147,44 @@ getImage el = case HTMLImageElement.fromNode (HTMLElement.toNode el) of
     naturalWidth img = Int.toNumber <$> (liftEffect $ HTMLImageElement.naturalWidth img)
     naturalHeight img = Int.toNumber<$>(liftEffect $ HTMLImageElement.naturalHeight img)
 
+getZIndex :: CSSStyleDeclaration -> Aff Int
+getZIndex css = 
+  (fromMaybe 0 <<< parseInt) <$> getPropertyValue "z-index" css
+
+getOverflow :: CSSStyleDeclaration -> Aff _
+getOverflow css =
+  lift2 { x: _, y: _ }
+    (getPropertyValue "overflow-x" css)
+    (getPropertyValue "overflow-y" css)  
+
 getBoxStyle :: HTMLElement -> Aff BoxStyle
 getBoxStyle el = do
   css <- getComputedStyle el
-  lift4 {borders: _, corners: _, backgroundColor: _, backgroundImage: _}
+  lift6 mkStyle
+     (getZIndex css)
      (getBorders css)
      (getCorners css)
      (getPropertyValue "background-color" css)
      (getBackgroundImage css >>= case _ of
          Just bg -> pure (Just bg)
          Nothing -> getImage el)
+     (getOverflow css)
+  where
+    mkStyle = { zIndex: _
+              , borders: _
+              , corners: _
+              , backgroundColor: _
+              , backgroundImage: _
+              , overflow: _
+              }
 
 fromHtml :: Node -> Aff (Maybe Box)
 fromHtml node = 
   case HTMLElement.fromNode node of
     Nothing -> pure Nothing
-    Just el -> Just <$> lift3 box (getBoundingBox el) (getBoxStyle el) (clipChildren el)
+    Just el -> Just <$> lift3 box (getBoundingBox el) (getBoxStyle el) (className el)
   where
-    clipChildren el = do
-      css <- getComputedStyle el
-      not <$> isProperty "overflow" "visible" css
+    className = liftEffect <<< HTMLElement.className
       
 drawRect :: BoundingBox -> Markup Unit
 drawRect (BoundingBox b) = rect ! attrs
@@ -232,17 +292,14 @@ drawBox id box@(Box {bbox, style}) = g $ do
     clipReference = if requireClipping
                       then clipPath ("url(" <> "#" <> clipId <> ")")
                       else mempty
-    clipId = "clip" <> show id
+    clipId = "border-clip" <> show id
     patternId = "pat" <> show id
 
-toSvg :: Int -> Box -> Markup Unit -> Markup Unit
-toSvg id box@(Box {bbox, style, clipChildren}) children = do
+toSvg :: Int -> Box -> Markup Unit
+toSvg id box@(Box {bbox, style, className}) = do
   if isInvisible
     then empty
-    else drawBox id box
-  if clipChildren
-    then clip children
-    else children
+    else drawBox id box ! attribute "className" className
   where
     isInvisible =
       (width == 0.0 || height == 0.0) ||
@@ -264,12 +321,4 @@ toSvg id box@(Box {bbox, style, clipChildren}) children = do
       in all (eq top) [right, bottom, left]
 
     borders = style.borders
-
-    clip markup = do
-       SVG.clipPath ! attribute "id" clipId $ (drawRect bbox)
-       markup ! clipReference
-
-    clipId = "bclip" <> show id
-    clipReference = clipPath ("url(#" <> clipId <> ")")
-
 
