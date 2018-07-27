@@ -22,7 +22,7 @@ import Data.Maybe (Maybe(..))
 import Data.String (replaceAll)
 import Data.String as String
 import Data.String.Regex as Regex
-import Data.String.Regex.Flags (ignoreCase, noFlags)
+import Data.String.Regex.Flags (ignoreCase)
 import Data.String.Regex.Flags as Regex.Flags
 import Effect (Effect)
 import Effect.Aff (Aff)

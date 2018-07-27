@@ -2,8 +2,7 @@
   "private": true,
   "scripts": {
     "clean": "rimraf output && rimraf .pulp-cache",
-    "build": "pulp build -- --censor-lib --strict",
-    "build-chrome": "pulp browserify -j 4 -O -m PageScript --to chrome/dist/PageScript.js",
+    "build": "pulp browserify -j 4 -O -m PageScript --to chrome/dist/PageScript.js",
     "test": "pulp test"
   },
   "devDependencies": {
