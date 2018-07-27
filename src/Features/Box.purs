@@ -46,11 +46,8 @@ newtype Box = Box
   , className :: String
   }
 
-box :: BoundingBox -> BoxStyle -> String -> Box
-box bbox style className = Box {bbox, style, className}
-
-bbox :: Box -> BoundingBox
-bbox (Box {bbox}) = bbox
+boundingBox :: Box -> BoundingBox
+boundingBox (Box {bbox}) = bbox
 
 zIndex :: Box -> Int
 zIndex (Box {style}) = style.zIndex
@@ -58,11 +55,11 @@ zIndex (Box {style}) = style.zIndex
 newStack :: Box -> Boolean
 newStack box = zIndex box > 0
 
-className :: Box -> String
-className (Box {className}) = className
+hasNewStackingContext :: Box -> Boolean
+hasNewStackingContext box = zIndex box > 0
 
-clipChildren :: Box -> Boolean
-clipChildren (Box {style}) =
+hideOverflow :: Box -> Boolean
+hideOverflow (Box {style}) =
   style.overflow.x /= "visible" || style.overflow.y /= "visible"
 
 intersect :: BoundingBox -> Box -> BoundingBox
@@ -184,7 +181,12 @@ fromHtml node =
     Nothing -> pure Nothing
     Just el -> Just <$> lift3 box (getBoundingBox el) (getBoxStyle el) (className el)
   where
+    className :: HTMLElement -> Aff String
     className = liftEffect <<< HTMLElement.className
+
+    box :: BoundingBox -> BoxStyle -> String -> Box
+    box bbox style className = Box {bbox, style, className}
+
       
 drawRect :: BoundingBox -> Markup Unit
 drawRect (BoundingBox b) = rect ! attrs

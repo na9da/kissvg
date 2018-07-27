@@ -5,19 +5,19 @@ module Page ( Page
 
 import Prelude
 
-import BoundingBox (BoundingBox(..))
+import BoundingBox (BoundingBox)
 import Control.Apply (lift3)
-import Control.Monad.ST as ST
-import Control.Monad.State (evalState, get, modify)
-import Data.Array (catMaybes, cons, elem, foldM, length, range, snoc, sortBy, zip)
-import Data.Foldable (traverse_)
+import Control.Monad.State (State, evalState, modify)
+import Control.Safely (foldM, traverse_)
+import Data.Array (cons, elem, snoc, sortBy)
+import Data.List (List, catMaybes)
+import Data.List as List
 import Data.Maybe (Maybe(..), maybe)
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple(..), fst, snd)
-import Debug.Trace (trace)
+import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
-import Features.Box (Box, bbox, className, clipChildren, drawRect, newStack, zIndex)
+import Features.Box (Box, boundingBox, drawRect, hasNewStackingContext, hideOverflow, zIndex)
 import Features.Box as Box
 import Features.Text (Text)
 import Features.Text as Text
@@ -26,7 +26,7 @@ import Helpers.CSS (CSSStyleDeclaration, getComputedStyle, isProperty)
 import Helpers.DOM (scrollHeight, scrollWidth)
 import Partial.Unsafe (unsafePartial)
 import Text.Smolder.HTML.Attributes (xmlns)
-import Text.Smolder.Markup (Markup, attribute, empty, text, (!))
+import Text.Smolder.Markup (Attribute, Markup, attribute, empty, (!))
 import Text.Smolder.SVG (g, svg)
 import Text.Smolder.SVG as SVG
 import Text.Smolder.SVG.Attributes (clipPath, version)
@@ -41,7 +41,7 @@ import Web.HTML.HTMLElement as HTMLElement
 
 data Feature
   = TextFeature Text
-  | BoxFeature Box (Array Feature)
+  | BoxFeature Box (List Feature)
 
 newtype Page = Page
   { width :: Number
@@ -75,7 +75,8 @@ featureFromHtml fontResolver node =
     nodeType = unsafePartial $ Node.nodeType node
     children =
       catMaybes <$> (traverse (featureFromHtml fontResolver) =<< childNodes node)
-    childNodes = liftEffect <<< (NodeList.toArray <=< Node.childNodes)
+    childNodes node =
+      List.fromFoldable <$> liftEffect (NodeList.toArray =<< Node.childNodes node)
 
 fromHtml :: FontResolver -> HTMLElement -> Aff Page
 fromHtml fontResolver el =
@@ -83,68 +84,99 @@ fromHtml fontResolver el =
   where
     feature = featureFromHtml fontResolver (HTMLElement.toNode el)
 
--- require cleanup -- 
+-- | An overflow clipping area
+type Clip = 
+  { markup :: Markup Unit
+  , attr :: Attribute
+  , area :: Maybe BoundingBox
+  }
+
+emptyClip :: Clip
+emptyClip = { markup: empty
+            , attr: mempty
+            , area: Nothing
+            }
+
+newClip :: Int -> BoundingBox -> Clip
+newClip id area =
+  let clipId = "overflow-clip-" <> show id
+      markup = SVG.clipPath ! attribute "id" clipId $ drawRect area
+      attr = clipPath $ "url(#" <> clipId <> ")"
+  in { area: Just area, markup, attr }
+
+intersectClip :: Int -> Clip -> Box -> Clip
+intersectClip id {area: Just area} box = newClip id (Box.intersect area box)
+intersectClip id {area: Nothing} box = newClip id (boundingBox box)
+
+-- | An z-index stacking context
+type StackEntry =
+  { id :: Int
+  , z :: Int
+  , markup :: Markup Unit
+  }
+
+type Stack = Array StackEntry
+
+stackPush :: Int -> Int -> Markup Unit -> Stack -> Stack
+stackPush id z markup stack = snoc stack {id, z, markup}
+
+stackMerge :: Markup Unit -> Stack -> Markup Unit
+stackMerge markup stack =
+  mergeMarkups $ cons markup $ map _.markup (stackSort stack)
+  where
+    stackSort :: Stack -> Stack
+    stackSort =
+      sortBy (\a b -> if a.z == b.z
+                      then compare a.id b.id
+                      else compare a.z b.z) 
+
+
+mergeMarkups :: Array (Markup Unit) -> Markup Unit
+mergeMarkups [] = empty
+mergeMarkups xs = g $ traverse_ identity xs
+
+-- | Build markup for a feature tree starting at `feature`
+-- |
+-- | Markups are built according to the nodes stacking order
+-- | given by its z-index. We also apply clipping if parent has overflow
+-- | set to not visible.
+buildMarkup :: Clip -> Stack -> Feature -> State Int Stack
+buildMarkup parentClip parentStack feature = do
+  id <- incrementId
+  case feature of
+    TextFeature text ->
+      let markup = Text.toSvg id text ! parentClip.attr
+      in pure $ stackPush id 0 markup parentStack
+    BoxFeature box children -> do
+      let boxMarkup = Box.toSvg id box ! parentClip.attr
+          Tuple markup clip =
+            if hideOverflow box
+            then attachClip boxMarkup (intersectClip id parentClip box)
+            else Tuple boxMarkup parentClip
+          z = zIndex box
+      if hasNewStackingContext box
+        then do
+          childStack <- walkChildren clip [] children
+          pure $ stackPush id z (stackMerge markup childStack) parentStack
+        else do
+          let parentStack' = stackPush id z markup parentStack
+          walkChildren clip parentStack' children
+  where
+    walkChildren :: Clip -> Stack -> List Feature -> State Int Stack
+    walkChildren clip stack = foldM (buildMarkup clip) stack
+
+    incrementId :: State Int Int
+    incrementId = modify (\i -> i + 1)
+
+    attachClip :: Markup Unit -> Clip -> Tuple (Markup Unit) Clip
+    attachClip bodyMarkup clip =
+      let markup = mergeMarkups [bodyMarkup, clip.markup]
+      in Tuple markup clip
 
 featureToSvg :: Feature -> Markup Unit
-featureToSvg feature' =
-  case feature' of
-    TextFeature _ -> empty
-    BoxFeature box _ ->
-      let clip = {ref: mempty, area: bbox box, markup: Nothing}
-          stack = evalState (iter clip [] feature') 0
-      in mergeStack empty stack
-  where
-    iter parentClip parentStack feature = do
-      id <- incrementId
-      case feature of
-        TextFeature text -> do
-          let markup = Text.toSvg id text ! parentClip.ref
-          pushStack 0 markup parentStack
-        BoxFeature box children -> do
-          let boxMarkup = Box.toSvg id box ! parentClip.ref
-              newClip = intersect id parentClip box
-              markup = case newClip.markup of
-                Nothing -> boxMarkup
-                Just m -> merge [m, boxMarkup]
-              z = zIndex box
-          if newStack box
-            then do
-              stack <- foldM (iter newClip) ([]) children
-              pushStack z (mergeStack markup stack) parentStack
-            else do
-              stack <- pushStack z markup parentStack
-              foldM (iter newClip) stack children
-
-    incrementId = modify (\id -> id + 1)
-
-    pushStack z markup stack = do
-      id <- get
-      pure $ snoc stack {id, z, markup}
-
-    mergeStack parentMarkup stack =
-      merge (cons parentMarkup (sortStack stack))
-
-    merge [] = empty
-    merge xs = g $ traverse_ identity xs
-
-    sortStack stack =
-      let stack' = sortBy (\a b -> if a.z == b.z
-                                   then compare a.id b.id
-                                   else compare a.z b.z) stack
-      in _.markup <$> stack'
-
-    intersect id clip@{area} box =
-      if clipChildren box
-      then let newArea = Box.intersect area box
-           in { area: newArea
-              , ref: clipPath ("url(#overflow-clip" <> show id <> ")")
-              , markup: Just $drawClip id newArea !attribute "className" (className box)
-              }
-      else clip {markup = Nothing}
-
-    drawClip clipId area =
-      SVG.clipPath ! attribute "id" ("overflow-clip" <> show clipId) $ drawRect area
-
+featureToSvg feature =
+  let stack = evalState (buildMarkup emptyClip mempty feature) 0
+  in stackMerge empty stack
 
 toSvg :: Page -> Markup Unit
 toSvg (Page p) = svg ! attrs $ maybe empty featureToSvg p.feature
