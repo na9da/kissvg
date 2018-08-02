@@ -6,6 +6,9 @@ For a sample, checkout the SVG generated for the Hacker News home page.
 
 <a alt="sample.svg" href="sample.svg"><img src="sample.svg" width="274" /></a>
 
+# Installation
+
+Head to the chrome webstore to install the [latest version](https://chrome.google.com/webstore/detail/kissvg/igcglmmgiplpcdhhfdpjkbmfjiplmdkm).
 
 # Development
 
